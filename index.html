@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SYD Score — Sistem Deteksi Hoaks</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['Syne', 'sans-serif'],
+            body: ['Space Grotesk', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            night: '#0a0a0f',
+            surface: '#12121a',
+            card: '#1a1a26',
+            border: '#2a2a3e',
+            accent: '#6c63ff',
+            accent2: '#00d4aa',
+            accent3: '#ff6b6b',
+            warn: '#ffd93d',
+            muted: '#8888aa',
+          },
+          animation: {
+            'fade-up': 'fadeUp 0.6s ease both',
+            'slide-in': 'slideIn 0.4s ease both',
+            'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
+            'spin-slow': 'spin 3s linear infinite',
+            'bar-fill': 'barFill 1s ease both',
+            'counter': 'counter 1.5s ease both',
+            'glow': 'glow 2s ease-in-out infinite',
+          },
+          keyframes: {
+            fadeUp: {
+              '0%': { opacity: '0', transform: 'translateY(24px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            },
+            slideIn: {
+              '0%': { opacity: '0', transform: 'translateX(-16px)' },
+              '100%': { opacity: '1', transform: 'translateX(0)' },
+            },
+            pulseSoft: {
+              '0%, 100%': { opacity: '0.7' },
+              '50%': { opacity: '1' },
+            },
+            barFill: {
+              '0%': { width: '0%' },
+              '100%': { width: 'var(--target-w)' },
+            },
+            glow: {
+              '0%, 100%': { boxShadow: '0 0 20px rgba(108,99,255,0.3)' },
+              '50%': { boxShadow: '0 0 40px rgba(108,99,255,0.6)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Space Grotesk', sans-serif;
+      background-color: #0a0a0f;
+      color: #e8e8f0;
+      min-height: 100vh;
+    }
+
+    /* Noise texture overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.5;
+    }
+
+    .gradient-bg {
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(108,99,255,0.15) 0%, transparent 70%),
+                  radial-gradient(ellipse 40% 40% at 90% 80%, rgba(0,212,170,0.08) 0%, transparent 60%),
+                  #0a0a0f;
+    }
+
+    .card-glass {
+      background: rgba(26, 26, 38, 0.8);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(42, 42, 62, 0.8);
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #12121a; }
+    ::-webkit-scrollbar-thumb { background: #2a2a3e; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #6c63ff; }
+
+    /* Gauge */
+    .gauge-ring {
+      transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .gauge-text {
+      transition: all 1.5s ease;
+    }
+
+    /* Progress bars */
+    .progress-bar {
+      transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Input glow focus */
+    textarea:focus, input:focus {
+      outline: none;
+      border-color: #6c63ff !important;
+      box-shadow: 0 0 0 3px rgba(108,99,255,0.15), 0 0 20px rgba(108,99,255,0.1);
+    }
+
+    /* Fade animations */
+    .fade-up { animation: fadeUp 0.6s ease both; }
+    .fade-up-1 { animation: fadeUp 0.6s 0.1s ease both; }
+    .fade-up-2 { animation: fadeUp 0.6s 0.2s ease both; }
+    .fade-up-3 { animation: fadeUp 0.6s 0.3s ease both; }
+    .fade-up-4 { animation: fadeUp 0.6s 0.4s ease both; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Result reveal */
+    .result-reveal {
+      animation: resultReveal 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+    @keyframes resultReveal {
+      from { opacity: 0; transform: scale(0.92) translateY(20px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    /* Shimmer loading */
+    .shimmer {
+      background: linear-gradient(90deg, rgba(42,42,62,0) 0%, rgba(108,99,255,0.15) 50%, rgba(42,42,62,0) 100%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    /* Tooltip */
+    .tooltip { position: relative; }
+    .tooltip:hover .tooltip-text { opacity: 1; pointer-events: auto; transform: translateY(0); }
+    .tooltip-text {
+      position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%) translateY(4px);
+      background: #1a1a26; border: 1px solid #2a2a3e; border-radius: 8px;
+      padding: 8px 12px; font-size: 12px; white-space: nowrap; color: #c8c8e0;
+      opacity: 0; pointer-events: none;
+      transition: all 0.2s ease; z-index: 100;
+    }
+
+    /* Tag chip */
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 500;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Rule item */
+    .rule-item:hover { background: rgba(108,99,255,0.08); }
+
+    /* Step badge */
+    .step-badge {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+      flex-shrink: 0;
+    }
+
+    /* Fuzzy triangle visual */
+    .mf-bar { height: 8px; border-radius: 4px; transition: width 1s ease; }
+
+    /* Divider */
+    .divider { border-color: #2a2a3e; }
+
+    /* Button hover */
+    .btn-primary {
+      background: linear-gradient(135deg, #6c63ff 0%, #5a54e0 100%);
+      transition: all 0.3s ease;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(108,99,255,0.4);
+    }
+    .btn-primary:active { transform: translateY(0); }
+
+    /* Neon border pulse on result */
+    .result-green { box-shadow: 0 0 0 1px rgba(0,212,170,0.3), 0 0 30px rgba(0,212,170,0.1); }
+    .result-yellow { box-shadow: 0 0 0 1px rgba(255,217,61,0.3), 0 0 30px rgba(255,217,61,0.1); }
+    .result-red { box-shadow: 0 0 0 1px rgba(255,107,107,0.3), 0 0 30px rgba(255,107,107,0.1); }
+
+    /* Particle dots decoration */
+    .dot-grid {
+      background-image: radial-gradient(rgba(108,99,255,0.2) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    /* Monospace formula */
+    .formula {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(108,99,255,0.08);
+      border: 1px solid rgba(108,99,255,0.2);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #a0a0cc;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  </style>
+</head>
+
+<body class="gradient-bg">
+  <!-- ─── HEADER ─── -->
+  <header class="relative z-10 border-b border-border px-6 py-4 fade-up">
+    <div class="max-w-5xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-accent/20 border border-accent/30 flex items-center justify-center">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6c63ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+        </div>
+        <div>
+          <div class="font-display text-lg font-bold text-white tracking-wide">SYD Score</div>
+          <div class="text-xs text-muted font-mono">Scoring-based Hoax Yield Detection</div>
+        </div>
+      </div>
+      <div class="hidden md:flex items-center gap-3">
+        <span class="chip" style="background:rgba(0,212,170,0.12);border:1px solid rgba(0,212,170,0.3);color:#00d4aa;">
+          <span class="w-1.5 h-1.5 rounded-full bg-accent2 animate-pulse-soft"></span>
+          Fuzzy Mamdani
+        </span>
+        <span class="chip" style="background:rgba(108,99,255,0.12);border:1px solid rgba(108,99,255,0.3);color:#6c63ff;">
+          v1.0.0
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ─── HERO ─── -->
+  <section class="relative z-10 max-w-5xl mx-auto px-6 pt-12 pb-8">
+    <div class="fade-up-1 text-center mb-10">
+      <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-5 text-sm font-mono"
+           style="background:rgba(108,99,255,0.1);border:1px solid rgba(108,99,255,0.25);color:#a0a0ff;">
+        🎓 Lomba Proyek Matematika — Tingkat Nasional
+      </div>
+      <h1 class="font-display text-4xl md:text-5xl font-extrabold text-white leading-tight mb-3">
+        Deteksi Hoaks Berbasis<br/>
+        <span style="background:linear-gradient(90deg,#6c63ff,#00d4aa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">
+          Matematika Fuzzy
+        </span>
+      </h1>
+      <p class="text-muted text-base max-w-xl mx-auto">
+        Analisis konten digital menggunakan <strong class="text-white/70">Fuzzy Logic Mamdani</strong> &
+        <strong class="text-white/70">Weighted Scoring</strong> — transparan, kuantitatif, dan dapat diverifikasi.
+      </p>
+    </div>
+
+    <!-- ─── INPUT CARD ─── -->
+    <div class="card-glass rounded-2xl p-6 mb-4 fade-up-2">
+      <div class="flex items-center gap-2 mb-4">
+        <div class="step-badge bg-accent/20 text-accent border border-accent/30">1</div>
+        <span class="font-semibold text-white">Masukkan Konten yang Ingin Dianalisis</span>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm text-muted mb-2 font-mono">TEKS BERITA / POSTINGAN</label>
+        <textarea id="inputTeks"
+          rows="5"
+          placeholder="Tempel teks berita, caption, atau postingan media sosial yang ingin Anda analisis di sini..."
+          class="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-white/90 placeholder-muted/50 resize-none transition-all"
+          style="font-family: 'Space Grotesk', sans-serif; line-height: 1.7;"></textarea>
+        <div class="flex justify-between mt-1.5">
+          <span id="charCount" class="text-xs text-muted font-mono">0 karakter</span>
+          <span class="text-xs text-muted">Maks. 10.000 karakter</span>
+        </div>
+      </div>
+
+      <div class="mb-5">
+        <label class="block text-sm text-muted mb-2 font-mono">URL / TAUTAN SUMBER <span class="text-xs opacity-60">(opsional)</span></label>
+        <input type="text" id="inputUrl"
+          placeholder="https://contoh.com/artikel-berita atau kosongkan jika tidak ada"
+          class="w-full bg-surface border border-border rounded-xl px-4 py-3 text-sm text-white/90 placeholder-muted/50 transition-all font-mono" />
+      </div>
+
+      <!-- Contoh cepat -->
+      <div class="mb-5">
+        <div class="text-xs text-muted mb-2 font-mono">CONTOH CEPAT:</div>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="isiContoh('hoaks')"
+            class="text-xs px-3 py-1.5 rounded-lg border transition-all hover:scale-105"
+            style="background:rgba(255,107,107,0.08);border-color:rgba(255,107,107,0.3);color:#ff9999;">
+            🚨 Contoh Hoaks
+          </button>
+          <button onclick="isiContoh('bukan')"
+            class="text-xs px-3 py-1.5 rounded-lg border transition-all hover:scale-105"
+            style="background:rgba(0,212,170,0.08);border-color:rgba(0,212,170,0.3);color:#80ffdd;">
+            ✅ Contoh Berita Resmi
+          </button>
+          <button onclick="isiContoh('ragu')"
+            class="text-xs px-3 py-1.5 rounded-lg border transition-all hover:scale-105"
+            style="background:rgba(255,217,61,0.08);border-color:rgba(255,217,61,0.3);color:#ffe080;">
+            ⚠️ Contoh Perlu Diperiksa
+          </button>
+        </div>
+      </div>
+
+      <!-- Tombol analisis -->
+      <button id="btnAnalisis" onclick="jalankanAnalisis()"
+        class="btn-primary w-full py-4 rounded-xl font-display font-bold text-white text-base tracking-wide flex items-center justify-center gap-3">
+        <svg id="btnIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
+        </svg>
+        <span id="btnText">Analisis Sekarang</span>
+        <svg id="btnSpinner" class="hidden animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- ─── ERROR MESSAGE ─── -->
+    <div id="errorBox" class="hidden card-glass rounded-xl p-4 mb-4 border" style="border-color:rgba(255,107,107,0.3);background:rgba(255,107,107,0.07);">
+      <div class="flex items-start gap-3">
+        <span class="text-xl">⚠️</span>
+        <div>
+          <div class="text-sm font-semibold text-red-400 mb-1">Terjadi Kesalahan</div>
+          <div id="errorMsg" class="text-sm text-red-300/80"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── HASIL ANALISIS ─── -->
+    <div id="hasilSection" class="hidden">
+
+      <!-- Skor Utama -->
+      <div id="hasilCard" class="card-glass rounded-2xl p-6 mb-4 result-reveal">
+        <div class="flex items-center gap-2 mb-6">
+          <div class="step-badge bg-accent/20 text-accent border border-accent/30">2</div>
+          <span class="font-semibold text-white">Hasil Analisis SYD Score</span>
+        </div>
+
+        <div class="flex flex-col md:flex-row items-center gap-8">
+          <!-- Gauge SVG -->
+          <div class="flex-shrink-0 relative">
+            <svg width="200" height="120" viewBox="0 0 200 120">
+              <!-- Track arc -->
+              <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#2a2a3e" stroke-width="14" stroke-linecap="round"/>
+              <!-- Color gradient arc -->
+              <defs>
+                <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#00d4aa"/>
+                  <stop offset="50%" stop-color="#ffd93d"/>
+                  <stop offset="100%" stop-color="#ff6b6b"/>
+                </linearGradient>
+              </defs>
+              <path id="gaugeFill" d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="url(#gaugeGrad)" stroke-width="14" stroke-linecap="round"
+                    stroke-dasharray="251.2" stroke-dashoffset="251.2" class="gauge-ring"/>
+              <!-- Needle -->
+              <g id="gaugeNeedle" transform-origin="100 100" style="transform:rotate(-90deg); transition: transform 1.5s cubic-bezier(0.4,0,0.2,1)">
+                <line x1="100" y1="100" x2="100" y2="30" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
+                <circle cx="100" cy="100" r="6" fill="#1a1a26" stroke="#6c63ff" stroke-width="2.5"/>
+              </g>
+              <!-- Labels -->
+              <text x="16" y="116" fill="#888" font-size="10" font-family="JetBrains Mono">0</text>
+              <text x="88" y="22" fill="#888" font-size="10" font-family="JetBrains Mono" text-anchor="middle">50</text>
+              <text x="182" y="116" fill="#888" font-size="10" font-family="JetBrains Mono" text-anchor="end">100</text>
+            </svg>
+            <!-- Score number overlay -->
+            <div class="absolute inset-x-0 bottom-2 text-center">
+              <div id="skorAngka" class="font-display text-5xl font-extrabold text-white">—</div>
+              <div id="skorLabel" class="font-mono text-xs text-muted mt-0.5">SKOR HOAKS</div>
+            </div>
+          </div>
+
+          <!-- Keterangan -->
+          <div class="flex-1 text-center md:text-left">
+            <div id="kategoriBadge" class="inline-flex items-center gap-2 px-4 py-2 rounded-full font-display font-bold text-lg mb-3">
+              — —
+            </div>
+            <p id="rekomendasiTeks" class="text-sm text-muted leading-relaxed mb-4"></p>
+            <div class="grid grid-cols-3 gap-3">
+              <div class="bg-surface rounded-xl p-3 border border-border text-center">
+                <div class="font-mono text-xs text-muted mb-1">I1 Indikasi</div>
+                <div id="skorI1" class="font-display text-xl font-bold text-white">—</div>
+              </div>
+              <div class="bg-surface rounded-xl p-3 border border-border text-center">
+                <div class="font-mono text-xs text-muted mb-1">I2 Bahasa</div>
+                <div id="skorI2" class="font-display text-xl font-bold text-white">—</div>
+              </div>
+              <div class="bg-surface rounded-xl p-3 border border-border text-center">
+                <div class="font-mono text-xs text-muted mb-1">I3 Indikasi</div>
+                <div id="skorI3" class="font-display text-xl font-bold text-white">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="card-glass rounded-2xl overflow-hidden mb-4">
+        <div class="flex border-b border-border overflow-x-auto">
+          <button onclick="showTab('indikator')" id="tab-indikator"
+            class="tab-btn px-5 py-3.5 text-sm font-semibold whitespace-nowrap transition-all border-b-2">
+            📊 Detail Indikator
+          </button>
+          <button onclick="showTab('fuzzy')" id="tab-fuzzy"
+            class="tab-btn px-5 py-3.5 text-sm font-semibold whitespace-nowrap transition-all border-b-2">
+            🔢 Proses Fuzzy
+          </button>
+          <button onclick="showTab('linguistik')" id="tab-linguistik"
+            class="tab-btn px-5 py-3.5 text-sm font-semibold whitespace-nowrap transition-all border-b-2">
+            🔍 Analisis Linguistik
+          </button>
+          <button onclick="showTab('5w1h')" id="tab-5w1h"
+            class="tab-btn px-5 py-3.5 text-sm font-semibold whitespace-nowrap transition-all border-b-2">
+            📋 5W+1H
+          </button>
+          <button onclick="showTab('alur')" id="tab-alur"
+            class="tab-btn px-5 py-3.5 text-sm font-semibold whitespace-nowrap transition-all border-b-2">
+            🗺️ Alur Sistem
+          </button>
+        </div>
+
+        <!-- TAB: Detail Indikator -->
+        <div id="panel-indikator" class="tab-panel p-6">
+          <div class="space-y-5">
+            <!-- I1 -->
+            <div class="bg-surface rounded-xl p-4 border border-border">
+              <div class="flex items-start justify-between mb-3">
+                <div>
+                  <div class="flex items-center gap-2 mb-0.5">
+                    <span class="font-mono text-xs font-bold text-accent bg-accent/10 px-2 py-0.5 rounded">I1</span>
+                    <span class="font-semibold text-white">Kredibilitas Sumber</span>
+                  </div>
+                  <div class="text-xs text-muted">Mengukur validitas dan kepercayaan sumber informasi</div>
+                </div>
+                <div class="text-right">
+                  <div id="i1-skor-display" class="font-mono text-2xl font-bold text-white">—</div>
+                  <div class="text-xs text-muted font-mono">indikasi hoaks</div>
+                </div>
+              </div>
+              <div class="bg-night rounded-lg p-3 mb-3 border border-border">
+                <div class="h-2 bg-border rounded-full overflow-hidden">
+                  <div id="bar-i1" class="h-full rounded-full progress-bar" style="width:0%;background:linear-gradient(90deg,#00d4aa,#ffd93d,#ff6b6b);"></div>
+                </div>
+              </div>
+              <div id="detail-i1" class="grid grid-cols-3 gap-2 text-xs font-mono"></div>
+            </div>
+
+            <!-- I2 -->
+            <div class="bg-surface rounded-xl p-4 border border-border">
+              <div class="flex items-start justify-between mb-3">
+                <div>
+                  <div class="flex items-center gap-2 mb-0.5">
+                    <span class="font-mono text-xs font-bold text-warn bg-warn/10 px-2 py-0.5 rounded">I2</span>
+                    <span class="font-semibold text-white">Bahasa & Judul Provokatif</span>
+                  </div>
+                  <div class="text-xs text-muted">5 fitur linguistik forensik berbobot tertimbang</div>
+                </div>
+                <div class="text-right">
+                  <div id="i2-skor-display" class="font-mono text-2xl font-bold text-white">—</div>
+                  <div class="text-xs text-muted font-mono">skor provokatif</div>
+                </div>
+              </div>
+              <div class="bg-night rounded-lg p-3 mb-3 border border-border">
+                <div class="h-2 bg-border rounded-full overflow-hidden">
+                  <div id="bar-i2" class="h-full rounded-full progress-bar" style="width:0%;background:linear-gradient(90deg,#ffd93d,#ff6b6b);"></div>
+                </div>
+              </div>
+              <div id="detail-i2-bars" class="space-y-2"></div>
+            </div>
+
+            <!-- I3 -->
+            <div class="bg-surface rounded-xl p-4 border border-border">
+              <div class="flex items-start justify-between mb-3">
+                <div>
+                  <div class="flex items-center gap-2 mb-0.5">
+                    <span class="font-mono text-xs font-bold text-accent2 bg-accent2/10 px-2 py-0.5 rounded">I3</span>
+                    <span class="font-semibold text-white">Kelengkapan Informasi</span>
+                  </div>
+                  <div class="text-xs text-muted">Pemeriksaan 6 unsur 5W+1H dengan bobot berbeda</div>
+                </div>
+                <div class="text-right">
+                  <div id="i3-skor-display" class="font-mono text-2xl font-bold text-white">—</div>
+                  <div class="text-xs text-muted font-mono">indikasi hoaks</div>
+                </div>
+              </div>
+              <div class="bg-night rounded-lg p-3 mb-3 border border-border">
+                <div class="h-2 bg-border rounded-full overflow-hidden">
+                  <div id="bar-i3" class="h-full rounded-full progress-bar" style="width:0%;background:linear-gradient(90deg,#00d4aa,#ffd93d,#ff6b6b);"></div>
+                </div>
+              </div>
+              <p id="detail-i3-text" class="text-xs text-muted font-mono"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Proses Fuzzy -->
+        <div id="panel-fuzzy" class="tab-panel p-6 hidden">
+          <div class="space-y-4">
+            <div class="formula" id="fuzzy-formula-1"></div>
+
+            <!-- Fuzzifikasi visual -->
+            <div class="bg-surface rounded-xl p-4 border border-border">
+              <div class="font-semibold text-sm text-white mb-3">Hasil Fuzzifikasi (Derajat Keanggotaan)</div>
+              <div id="fuzzy-table" class="overflow-x-auto">
+                <table class="w-full text-xs font-mono">
+                  <thead>
+                    <tr class="border-b border-border">
+                      <th class="py-2 text-left text-muted">Variabel</th>
+                      <th class="py-2 text-center text-muted">Nilai</th>
+                      <th class="py-2 text-center" style="color:#00d4aa">μ RENDAH</th>
+                      <th class="py-2 text-center" style="color:#ffd93d">μ SEDANG</th>
+                      <th class="py-2 text-center" style="color:#ff6b6b">μ TINGGI</th>
+                    </tr>
+                  </thead>
+                  <tbody id="fuzzy-tbody" class="divide-y divide-border"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Rules aktif -->
+            <div class="bg-surface rounded-xl p-4 border border-border">
+              <div class="font-semibold text-sm text-white mb-3">
+                Top Rules yang Aktif <span id="rules-aktif-count" class="text-muted font-normal"></span>
+              </div>
+              <div id="rules-list" class="space-y-1.5 max-h-64 overflow-y-auto pr-1"></div>
+            </div>
+
+            <!-- Defuzzifikasi -->
+            <div class="bg-surface rounded-xl p-4 border border-border">
+              <div class="font-semibold text-sm text-white mb-3">Defuzzifikasi — Metode Centroid</div>
+              <div class="formula" id="defuzz-formula"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Analisis Linguistik -->
+        <div id="panel-linguistik" class="tab-panel p-6 hidden">
+          <div class="space-y-4" id="linguistik-content">
+            <!-- Diisi JS -->
+          </div>
+        </div>
+
+        <!-- TAB: 5W+1H -->
+        <div id="panel-5w1h" class="tab-panel p-6 hidden">
+          <div id="w5h1-content"></div>
+        </div>
+
+        <!-- TAB: Alur Sistem -->
+        <div id="panel-alur" class="tab-panel p-6 hidden">
+          <div class="space-y-3">
+            <p class="text-sm text-muted mb-4">Visualisasi alur matematis pemrosesan sistem SYD Score secara lengkap.</p>
+            <div id="alur-steps" class="relative">
+              <!-- Flow chart dirender JS -->
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Formula Lengkap -->
+      <div class="card-glass rounded-2xl p-6 mb-4">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="step-badge bg-accent2/20 text-accent2 border border-accent2/30">Σ</div>
+          <span class="font-semibold text-white">Model Matematis Lengkap</span>
+        </div>
+        <div class="space-y-3" id="formula-section">
+          <!-- Diisi JS -->
+        </div>
+      </div>
+
+      <!-- Reset -->
+      <button onclick="resetForm()"
+        class="w-full py-3 rounded-xl border border-border text-muted text-sm font-semibold transition-all hover:border-accent hover:text-accent hover:bg-accent/5">
+        ↺ Analisis Konten Lain
+      </button>
+    </div>
+
+    <!-- ─── INFO PANEL (sebelum analisis) ─── -->
+    <div id="infoPanel" class="grid md:grid-cols-3 gap-4 mt-6 fade-up-4">
+      <div class="card-glass rounded-xl p-4 border border-border">
+        <div class="text-2xl mb-2">🔢</div>
+        <div class="font-semibold text-sm text-white mb-1">Fuzzy Mamdani</div>
+        <div class="text-xs text-muted leading-relaxed">27 aturan IF-THEN dengan 3 variabel input dan metode centroid defuzzifikasi.</div>
+      </div>
+      <div class="card-glass rounded-xl p-4 border border-border">
+        <div class="text-2xl mb-2">⚖️</div>
+        <div class="font-semibold text-sm text-white mb-1">Weighted Scoring</div>
+        <div class="text-xs text-muted leading-relaxed">5 fitur linguistik forensik dengan bobot berbeda berdasarkan jurnal ilmiah.</div>
+      </div>
+      <div class="card-glass rounded-xl p-4 border border-border">
+        <div class="text-2xl mb-2">🔍</div>
+        <div class="font-semibold text-sm text-white mb-1">3 Indikator Utama</div>
+        <div class="text-xs text-muted leading-relaxed">Kredibilitas Sumber, Bahasa Provokatif, dan Kelengkapan 5W+1H.</div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ─── FOOTER ─── -->
+  <footer class="relative z-10 border-t border-border mt-12 px-6 py-6">
+    <div class="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-muted font-mono">
+      <div>SYD Score © 2026 — Lomba Proyek Matematika Nasional</div>
+      <div class="flex items-center gap-4">
+        <span>Model: Fuzzy Mamdani + Weighted Scoring</span>
+        <span class="w-1 h-1 rounded-full bg-border"></span>
+        <span>Sumber: Aritonang (2021), Putri et al. (2025)</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ─── SCRIPT ─── -->
+  <script>
+    // ─────────────────────────────────────────
+    // KONFIGURASI
+    // ─────────────────────────────────────────
+    const API_URL = 'http://localhost:5000/analisis';
+
+    // Contoh teks untuk demo
+    const CONTOH = {
+      hoaks: {
+        teks: `GAWAT!! Pemerintah DIAM-DIAM Campurkan Racun ke Air PDAM, Warga Diminta SEGERA Berhenti Minum Air Keran Sebelum Terlambat!!! Sumber terpercaya dari dalam istana menyebutkan hal ini dilakukan secara sengaja untuk mengurangi jumlah penduduk. WASPADA dan SEBARKAN sebelum informasi ini DIHAPUS oleh pihak berwenang!!! Jangan percaya pemerintah yang LICIK ini! Ini sudah terbukti 100 persen benar! Viralkan sebelum diblokir!`,
+        url: ''
+      },
+      bukan: {
+        teks: `Dirangkum detikcom, Sabtu (25/4/2026), Menteri Kesehatan Budi Gunadi Sadikin mengumumkan bahwa program vaksinasi nasional telah berhasil menjangkau 85 persen dari target sasaran di seluruh Indonesia. Pengumuman disampaikan dalam konferensi pers di Gedung Kemenkes, Jakarta Selatan, pada Jumat (24/4/2026) pukul 14.00 WIB. Menurut data Kemenkes, cakupan tertinggi dicapai di DKI Jakarta dengan 92 persen, diikuti Jawa Barat 88 persen.`,
+        url: 'https://health.detik.com/berita-detikhealth/contoh'
+      },
+      ragu: {
+        teks: `Beredar kabar bahwa ada produk suplemen yang diklaim bisa menyembuhkan berbagai penyakit kronis dalam waktu 7 hari. Banyak orang sudah membuktikannya dan hasilnya luar biasa fantastis. Produk ini konon sudah terbukti secara ilmiah namun sengaja disembunyikan oleh perusahaan farmasi besar karena mengancam bisnis mereka. Harganya memang mahal tapi dijamin ampuh 100 persen.`,
+        url: ''
+      }
+    };
+
+    // ─────────────────────────────────────────
+    // FUNGSI CONTOH
+    // ─────────────────────────────────────────
+    function isiContoh(tipe) {
+      const c = CONTOH[tipe];
+      document.getElementById('inputTeks').value = c.teks;
+      document.getElementById('inputUrl').value = c.url;
+      updateCharCount();
+    }
+
+    function updateCharCount() {
+      const teks = document.getElementById('inputTeks').value;
+      document.getElementById('charCount').textContent = teks.length.toLocaleString('id') + ' karakter';
+    }
+
+    document.getElementById('inputTeks').addEventListener('input', updateCharCount);
+
+    // ─────────────────────────────────────────
+    // TABS
+    // ─────────────────────────────────────────
+    function showTab(tabId) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.style.borderColor = 'transparent';
+        b.style.color = '#8888aa';
+      });
+      document.getElementById('panel-' + tabId).classList.remove('hidden');
+      const btn = document.getElementById('tab-' + tabId);
+      btn.style.borderColor = '#6c63ff';
+      btn.style.color = '#a0a0ff';
+    }
+    // Init tabs
+    showTab('indikator');
+
+    // ─────────────────────────────────────────
+    // GAUGE ANIMATION
+    // ─────────────────────────────────────────
+    function animateGauge(skor) {
+      const circumference = 251.2;
+      const pct = Math.min(Math.max(skor / 100, 0), 1);
+      const offset = circumference * (1 - pct);
+
+      const fill = document.getElementById('gaugeFill');
+      const needle = document.getElementById('gaugeNeedle');
+      const skorEl = document.getElementById('skorAngka');
+
+      setTimeout(() => {
+        fill.style.strokeDashoffset = offset;
+        // Needle: -90deg (0) → +90deg (100) 
+        const angle = -90 + (pct * 180);
+        needle.style.transform = `rotate(${angle}deg)`;
+
+        // Animate number counter
+        let start = 0;
+        const duration = 1500;
+        const startTime = performance.now();
+        function tick(now) {
+          const elapsed = now - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          const eased = 1 - Math.pow(1 - progress, 3);
+          const current = Math.round(eased * skor);
+          skorEl.textContent = current;
+          if (progress < 1) requestAnimationFrame(tick);
+          else skorEl.textContent = Math.round(skor);
+        }
+        requestAnimationFrame(tick);
+      }, 200);
+    }
+
+    // ─────────────────────────────────────────
+    // PROGRESS BAR ANIMATION
+    // ─────────────────────────────────────────
+    function animateBar(id, value) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.width = '0%';
+      setTimeout(() => {
+        el.style.width = value + '%';
+      }, 100);
+    }
+
+    // ─────────────────────────────────────────
+    // RENDER HASIL
+    // ─────────────────────────────────────────
+    // ─────────────────────────────────────────
+    // HELPER — safe number formatting
+    // Mencegah crash jika nilai undefined/null/NaN
+    // ─────────────────────────────────────────
+    function safe(val, dec=2, fb='—') {
+      const n = parseFloat(val);
+      return (val !== undefined && val !== null && !isNaN(n)) ? n.toFixed(dec) : fb;
+    }
+    function safeNum(val, fb=0) {
+      const n = parseFloat(val);
+      return !isNaN(n) ? n : fb;
+    }
+
+        function renderHasil(data) {
+      // Guard: pastikan struktur data lengkap
+      if (!data || !data.hasil || !data.indikator || !data.fuzzy) {
+        tampilkanError('Data dari server tidak lengkap. Coba analisis ulang.');
+        return;
+      }
+      const h = data.hasil || {};
+      const ind = data.indikator || {};
+      const fuzzy = data.fuzzy || {};
+
+      // Guard semua sub-objek agar tidak undefined
+      ind.I1 = ind.I1 || {}; ind.I2 = ind.I2 || {}; ind.I3 = ind.I3 || {};
+      ind.I1.detail = ind.I1.detail || {};
+      ind.I2.detail = ind.I2.detail || {};
+      ind.I3.detail = ind.I3.detail || {};
+      fuzzy.fuzzifikasi = fuzzy.fuzzifikasi || {};
+      fuzzy.fuzzifikasi.I1 = fuzzy.fuzzifikasi.I1 || {};
+      fuzzy.fuzzifikasi.I2 = fuzzy.fuzzifikasi.I2 || {};
+      fuzzy.fuzzifikasi.I3 = fuzzy.fuzzifikasi.I3 || {};
+      fuzzy.rules_log = fuzzy.rules_log || [];
+      h.skor = safeNum(h.skor, 0);
+      h.warna = h.warna || 'kuning';
+      h.emoji = h.emoji || '⚠️';
+      h.kategori = h.kategori || '—';
+      h.rekomendasi = h.rekomendasi || '';
+      ind.I1.nilai_indikasi = safeNum(ind.I1.nilai_indikasi, 0);
+      ind.I1.kredibilitas = safeNum(ind.I1.kredibilitas, 0);
+      ind.I2.nilai = safeNum(ind.I2.nilai, 0);
+      ind.I3.nilai_indikasi = safeNum(ind.I3.nilai_indikasi, 0);
+      ind.I3.kelengkapan_k = safeNum(ind.I3.kelengkapan_k, 0);
+
+      // Skor utama
+      animateGauge(h.skor);
+
+      // Warna hasil
+      const warnaCfg = {
+        hijau: { bg: 'rgba(0,212,170,0.15)', border: 'rgba(0,212,170,0.4)', text: '#00d4aa', shadow: 'result-green' },
+        kuning: { bg: 'rgba(255,217,61,0.12)', border: 'rgba(255,217,61,0.4)', text: '#ffd93d', shadow: 'result-yellow' },
+        merah: { bg: 'rgba(255,107,107,0.12)', border: 'rgba(255,107,107,0.4)', text: '#ff6b6b', shadow: 'result-red' },
+      };
+      const wc = warnaCfg[h.warna] || warnaCfg.kuning;
+
+      const hasilCard = document.getElementById('hasilCard');
+      hasilCard.style.background = wc.bg;
+      hasilCard.style.borderColor = wc.border;
+      hasilCard.className = hasilCard.className.replace(/result-(green|yellow|red)/, '') + ' ' + wc.shadow;
+
+      const badge = document.getElementById('kategoriBadge');
+      badge.textContent = h.emoji + ' ' + h.kategori;
+      badge.style.background = wc.bg;
+      badge.style.border = `1px solid ${wc.border}`;
+      badge.style.color = wc.text;
+
+      document.getElementById('rekomendasiTeks').textContent = h.rekomendasi;
+      document.getElementById('skorI1').textContent = safe(ind.I1.nilai_indikasi,1);
+      document.getElementById('skorI2').textContent = safe(ind.I2.nilai,1);
+      document.getElementById('skorI3').textContent = safe(ind.I3.nilai_indikasi,1);
+
+      // ── Tab: Detail Indikator ──
+      // I1
+      document.getElementById('i1-skor-display').textContent = safe(ind.I1.nilai_indikasi,2);
+      animateBar('bar-i1', ind.I1.nilai_indikasi);
+      const d1 = ind.I1.detail;
+      document.getElementById('detail-i1').innerHTML = `
+        <div class="bg-night rounded-lg p-2 border border-border">
+          <div class="text-muted">a1 — Sumber eksplisit</div>
+          <div class="${d1.a1 ? 'text-accent2' : 'text-accent3'} font-bold">${d1.a1 ? '✓ Ada' : '✗ Tidak ada'}</div>
+        </div>
+        <div class="bg-night rounded-lg p-2 border border-border">
+          <div class="text-muted">a2 — Kepercayaan domain</div>
+          <div class="${d1.a2 >= 1 ? 'text-accent2' : d1.a2 >= 0.5 ? 'text-warn' : 'text-accent3'} font-bold">${d1.a2_domain_status || '—'}</div>
+        </div>
+        <div class="bg-night rounded-lg p-2 border border-border">
+          <div class="text-muted">a3 — Validitas URL</div>
+          <div class="${d1.a3 ? 'text-accent2' : 'text-accent3'} font-bold">${d1.a3_url_valid || '—'}</div>
+        </div>
+      `;
+
+      // I2
+      document.getElementById('i2-skor-display').textContent = safe(ind.I2.nilai,2);
+      animateBar('bar-i2', ind.I2.nilai);
+      const d2 = ind.I2.detail;
+      const fitur = [
+        { key: 'f1_capslock', nama: 'f1 — CAPSLOCK', bobot: 'v1=0.20', color: '#a0a0ff' },
+        { key: 'f2_tanda_baca', nama: 'f2 — Tanda Baca Berlebihan', bobot: 'v2=0.15', color: '#c0a0ff' },
+        { key: 'f3_emosional', nama: 'f3 — Kata Emosional', bobot: 'v3=0.30', color: '#ff9999' },
+        { key: 'f4_hasutan', nama: 'f4 — Kata Hasutan', bobot: 'v4=0.20', color: '#ffb080' },
+        { key: 'f5_hiperbola', nama: 'f5 — Kata Hiperbola', bobot: 'v5=0.15', color: '#ffdd80' },
+      ];
+      let barsHtml = '';
+      fitur.forEach(f => {
+        const fd = d2[f.key];
+        if (!fd) return;
+        const n = fd.normalized || 0;
+        barsHtml += `
+          <div class="flex items-center gap-3">
+            <div class="w-36 text-xs text-muted truncate">${f.nama}</div>
+            <div class="flex-1 h-2 bg-night rounded-full overflow-hidden">
+              <div class="h-full rounded-full progress-bar" style="width:${n}%;background:${f.color};"></div>
+            </div>
+            <div class="text-xs font-mono w-12 text-right" style="color:${f.color}">${n.toFixed(1)}</div>
+          </div>
+        `;
+      });
+      document.getElementById('detail-i2-bars').innerHTML = barsHtml;
+      setTimeout(() => {
+        document.querySelectorAll('#detail-i2-bars .progress-bar').forEach(bar => {
+          const target = bar.style.width;
+          bar.style.width = '0';
+          setTimeout(() => { bar.style.width = target; }, 200);
+        });
+      }, 100);
+
+      // I3
+      const i3v = safe(ind.I3.nilai_indikasi,2);
+      const kv = safe(ind.I3.kelengkapan_k,2);
+      document.getElementById('i3-skor-display').textContent = i3v;
+      animateBar('bar-i3', ind.I3.nilai_indikasi);
+      document.getElementById('detail-i3-text').textContent =
+        `K (Kelengkapan) = ${kv}/100  →  I3 (Indikasi Hoaks) = 100 - ${kv} = ${i3v}`;
+
+      // ── Tab: Fuzzy ──
+      document.getElementById('fuzzy-formula-1').textContent =
+        `Fuzzifikasi → Rule Evaluation (27 rules) → Agregasi → Defuzzifikasi (Centroid)\n\nInput: I1=${safe(ind.I1.nilai_indikasi,2)}, I2=${safe(ind.I2.nilai,2)}, I3=${safe(ind.I3.nilai_indikasi,2)}\nSkor Akhir H = ${h.skor}`;
+
+      const fuzz = fuzzy.fuzzifikasi;
+      const varNames = { I1: 'I1 (Kredibilitas)', I2: 'I2 (Bahasa)', I3: 'I3 (Kelengkapan)' };
+      const varVals = { I1: ind.I1.nilai_indikasi, I2: ind.I2.nilai, I3: ind.I3.nilai_indikasi };
+      let tbodyHtml = '';
+      ['I1','I2','I3'].forEach(v => {
+        const mu = fuzz[v];
+        tbodyHtml += `
+          <tr class="hover:bg-white/3 transition-colors">
+            <td class="py-2.5 pr-3 text-white/80">${varNames[v]}</td>
+            <td class="py-2.5 text-center text-white font-bold">${safe(varVals[v],2)}</td>
+            <td class="py-2.5 text-center" style="color:#00d4aa">${safe(mu.rendah,4,'0.0000')}</td>
+            <td class="py-2.5 text-center" style="color:#ffd93d">${safe(mu.sedang,4,'0.0000')}</td>
+            <td class="py-2.5 text-center" style="color:#ff6b6b">${safe(mu.tinggi,4,'0.0000')}</td>
+          </tr>
+        `;
+      });
+      document.getElementById('fuzzy-tbody').innerHTML = tbodyHtml;
+
+      document.getElementById('rules-aktif-count').textContent = `(${fuzzy.rules_aktif} dari 27 aktif)`;
+      let rulesHtml = '';
+      (fuzzy.rules_log || []).forEach((r, i) => {
+        if (r.alpha < 1e-6) return;
+        const pct = safe(r.alpha*100,0,'0');
+        const outColor = r.output === 'hoaks_tinggi' ? '#ff6b6b' : r.output === 'perlu_periksa' ? '#ffd93d' : '#00d4aa';
+        rulesHtml += `
+          <div class="rule-item flex items-center gap-3 px-3 py-2 rounded-lg transition-colors cursor-default">
+            <span class="font-mono text-xs text-muted w-5">${i+1}</span>
+            <span class="text-xs text-white/80 flex-1 font-mono">IF ${r.kondisi}</span>
+            <span class="text-xs font-bold font-mono" style="color:${outColor}">→ ${r.output.toUpperCase()}</span>
+            <div class="w-16 h-1.5 bg-border rounded-full overflow-hidden">
+              <div class="h-full rounded-full" style="width:${pct}%;background:${outColor};"></div>
+            </div>
+            <span class="text-xs font-mono text-muted w-10 text-right">α=${safe(r.alpha,3,'0.000')}</span>
+          </div>
+        `;
+      });
+      document.getElementById('rules-list').innerHTML = rulesHtml || '<div class="text-xs text-muted">Tidak ada rule aktif.</div>';
+
+      document.getElementById('defuzz-formula').textContent =
+        `H = Σ[x_k × μ_gabungan(x_k)] / Σ[μ_gabungan(x_k)]\n   = ${h.skor} (diskretisasi 1001 titik, domain [0, 100])`;
+
+      // ── Tab: Linguistik ──
+      let lingHtml = '';
+      const d2full = ind.I2.detail;
+      const fiturInfo = [
+        { key: 'f1_capslock', icon: '🔠', nama: 'Kata CAPSLOCK (f1)', bobot: '20%', color: '#a0a0ff',
+          getInfo: d => `${d.jumlah} kata CAPSLOCK dari ${d2full.total_kata} total kata. Threshold: 5%.${d.contoh && d.contoh.length ? ' Contoh: ' + d.contoh.join(', ') : ''}` },
+        { key: 'f2_tanda_baca', icon: '❗', nama: 'Tanda Baca Berlebihan (f2)', bobot: '15%', color: '#c0a0ff',
+          getInfo: d => `${d.jumlah} kemunculan "!!" atau "??" dari ${d2full.total_kalimat} kalimat. Threshold: 20%.` },
+        { key: 'f3_emosional', icon: '😡', nama: 'Kata Emosional (f3)', bobot: '30%', color: '#ff9999',
+          getInfo: d => `${d.jumlah} kata emosional terdeteksi.${d.kata_ditemukan && d.kata_ditemukan.length ? ' Kata: ' + d.kata_ditemukan.join(', ') : ' Tidak ada.'}` },
+        { key: 'f4_hasutan', icon: '📢', nama: 'Kata Hasutan (f4)', bobot: '20%', color: '#ffb080',
+          getInfo: d => `${d.jumlah} frasa hasutan terdeteksi.${d.kata_ditemukan && d.kata_ditemukan.length ? ' Frasa: ' + d.kata_ditemukan.join(', ') : ' Tidak ada.'}` },
+        { key: 'f5_hiperbola', icon: '🌪️', nama: 'Kata Hiperbola (f5)', bobot: '15%', color: '#ffdd80',
+          getInfo: d => `${d.jumlah} frasa hiperbola terdeteksi.${d.kata_ditemukan && d.kata_ditemukan.length ? ' Frasa: ' + d.kata_ditemukan.join(', ') : ' Tidak ada.'}` },
+      ];
+      fiturInfo.forEach(f => {
+        const fd = d2full[f.key];
+        if (!fd) return;
+        const n = fd.normalized || 0;
+        const severity = n > 66 ? 'tinggi' : n > 33 ? 'sedang' : 'rendah';
+        lingHtml += `
+          <div class="bg-surface rounded-xl p-4 border border-border">
+            <div class="flex items-start justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <span class="text-lg">${f.icon}</span>
+                <span class="font-semibold text-sm text-white">${f.nama}</span>
+                <span class="chip" style="background:rgba(108,99,255,0.1);border:1px solid rgba(108,99,255,0.2);color:#8888cc;">bobot ${f.bobot}</span>
+              </div>
+              <span class="font-mono text-sm font-bold" style="color:${f.color}">${n.toFixed(1)}/100</span>
+            </div>
+            <div class="text-xs text-muted mb-2">${f.getInfo(fd)}</div>
+            <div class="h-1.5 bg-night rounded-full overflow-hidden">
+              <div class="h-full rounded-full" style="width:${n}%;background:${f.color};transition:width 1s ease;"></div>
+            </div>
+          </div>
+        `;
+      });
+      document.getElementById('linguistik-content').innerHTML = lingHtml;
+
+      // ── Tab: 5W+1H ──
+      const d3 = ind.I3.detail;
+      const wItems = [
+        { key: 'who', label: 'Who (Siapa)', icon: '👤', bobot: '20%', pertanyaan: 'Ada nama orang atau lembaga spesifik?' },
+        { key: 'what', label: 'What (Apa)', icon: '📌', bobot: '20%', pertanyaan: 'Ada subjek kejadian yang jelas?' },
+        { key: 'when', label: 'When (Kapan)', icon: '🕐', bobot: '20%', pertanyaan: 'Ada tanggal atau waktu spesifik?' },
+        { key: 'where', label: 'Where (Di mana)', icon: '📍', bobot: '15%', pertanyaan: 'Ada lokasi yang jelas?' },
+        { key: 'why', label: 'Why (Mengapa)', icon: '❓', bobot: '15%', pertanyaan: 'Ada penjelasan sebab atau alasan?' },
+        { key: 'how', label: 'How (Bagaimana)', icon: '⚙️', bobot: '10%', pertanyaan: 'Ada penjelasan proses atau mekanisme?' },
+      ];
+      let w5Html = `
+        <div class="mb-4 font-mono text-xs text-muted">
+          K = ${safe(ind.I3.kelengkapan_k,2)}/100 → I3 Indikasi = ${safe(ind.I3.nilai_indikasi,2)}/100
+        </div>
+        <div class="grid md:grid-cols-2 gap-3">
+      `;
+      wItems.forEach(w => {
+        const item = d3[w.key];
+        if (!item) return;
+        const s = item.skor;
+        const col = s >= 1 ? '#00d4aa' : s >= 0.5 ? '#ffd93d' : '#ff6b6b';
+        const label = s >= 1 ? 'Terpenuhi' : s >= 0.5 ? 'Sebagian' : 'Tidak ada';
+        w5Html += `
+          <div class="bg-surface rounded-xl p-4 border border-border flex items-start gap-3">
+            <span class="text-2xl">${w.icon}</span>
+            <div class="flex-1">
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-semibold text-sm text-white">${w.label}</span>
+                <span class="font-mono text-xs font-bold" style="color:${col}">${label} (${s})</span>
+              </div>
+              <div class="text-xs text-muted mb-2">${w.pertanyaan}</div>
+              <div class="flex items-center gap-2">
+                <div class="flex-1 h-1.5 bg-night rounded-full">
+                  <div class="h-full rounded-full" style="width:${s*100}%;background:${col};transition:width 0.8s ease;"></div>
+                </div>
+                <span class="text-xs text-muted font-mono">bobot ${w.bobot}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      w5Html += '</div>';
+      document.getElementById('w5h1-content').innerHTML = w5Html;
+
+      // ── Tab: Alur Sistem ──
+      const alurSteps = [
+        { icon: '📝', title: 'INPUT', desc: `Teks (${data.input.panjang_teks} karakter)${data.input.ada_url ? ' + URL' : ''}`, color: '#6c63ff' },
+        { icon: '⚖️', title: 'WEIGHTED SCORING (I1, I2, I3)', desc: `I1=${safe(ind.I1.nilai_indikasi,1)} | I2=${safe(ind.I2.nilai,1)} | I3=${safe(ind.I3.nilai_indikasi,1)}`, color: '#a0a0ff' },
+        { icon: '🔺', title: 'FUZZIFIKASI', desc: `Triangular MF → μ_Rendah, μ_Sedang, μ_Tinggi`, color: '#00d4aa' },
+        { icon: '📐', title: 'EVALUASI 27 RULES', desc: `α = min(μ_I1, μ_I2, μ_I3) — ${fuzzy.rules_aktif} rule aktif`, color: '#ffd93d' },
+        { icon: '∫', title: 'AGREGASI + DEFUZZIFIKASI', desc: `Centroid: H = Σ(x·μ) / Σ(μ) = ${h.skor}`, color: '#ff9999' },
+        { icon: h.emoji, title: h.kategori, desc: `Skor H = ${h.skor}/100`, color: h.warna === 'hijau' ? '#00d4aa' : h.warna === 'merah' ? '#ff6b6b' : '#ffd93d' },
+      ];
+      let alurHtml = '<div class="space-y-3">';
+      alurSteps.forEach((s, i) => {
+        alurHtml += `
+          <div class="flex items-start gap-4">
+            <div class="flex flex-col items-center">
+              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-lg border" style="background:${s.color}18;border-color:${s.color}40;">${s.icon}</div>
+              ${i < alurSteps.length - 1 ? `<div class="w-0.5 h-6 mt-2" style="background:linear-gradient(${s.color},${alurSteps[i+1].color}40);"></div>` : ''}
+            </div>
+            <div class="flex-1 pt-1.5">
+              <div class="font-mono text-xs font-bold mb-0.5" style="color:${s.color}">${s.title}</div>
+              <div class="text-sm text-muted">${s.desc}</div>
+            </div>
+          </div>
+        `;
+      });
+      alurHtml += '</div>';
+      document.getElementById('alur-steps').innerHTML = alurHtml;
+
+      // ── Formula Lengkap ──
+      document.getElementById('formula-section').innerHTML = `
+        <div class="formula">I1 = [(a1 + a2 + a3) / 3] × 100 = ${safe(ind.I1.kredibilitas,2)}
+Nilai Indikasi I1 = 100 − ${safe(ind.I1.kredibilitas,2)} = ${safe(ind.I1.nilai_indikasi,2)}</div>
+        <div class="formula">I2 = 0.20·f1* + 0.15·f2* + 0.30·f3* + 0.20·f4* + 0.15·f5* = ${safe(ind.I2.nilai,2)}</div>
+        <div class="formula">K = Σ(uj·cj) × 100 = ${safe(ind.I3.kelengkapan_k,2)}
+Nilai Indikasi I3 = 100 − K = ${safe(ind.I3.nilai_indikasi,2)}</div>
+        <div class="formula">μ(I1): Rendah=${fuzzy.fuzzifikasi.I1.rendah}, Sedang=${fuzzy.fuzzifikasi.I1.sedang}, Tinggi=${fuzzy.fuzzifikasi.I1.tinggi}
+μ(I2): Rendah=${fuzzy.fuzzifikasi.I2.rendah}, Sedang=${fuzzy.fuzzifikasi.I2.sedang}, Tinggi=${fuzzy.fuzzifikasi.I2.tinggi}
+μ(I3): Rendah=${fuzzy.fuzzifikasi.I3.rendah}, Sedang=${fuzzy.fuzzifikasi.I3.sedang}, Tinggi=${fuzzy.fuzzifikasi.I3.tinggi}</div>
+        <div class="formula">H (Defuzzifikasi Centroid) = ${h.skor}  →  ${h.emoji} ${h.kategori}</div>
+      `;
+    }
+
+    // ─────────────────────────────────────────
+    // ANALISIS UTAMA
+    // ─────────────────────────────────────────
+    async function jalankanAnalisis() {
+      const teks = document.getElementById('inputTeks').value.trim();
+      const url = document.getElementById('inputUrl').value.trim();
+
+      // Validasi client-side
+      if (!teks) {
+        tampilkanError('Silakan masukkan teks yang ingin dianalisis.');
+        return;
+      }
+      if (teks.length < 10) {
+        tampilkanError('Teks terlalu pendek. Masukkan minimal 10 karakter.');
+        return;
+      }
+
+      sembunyikanError();
+      setLoading(true);
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teks, url }),
+          signal: AbortSignal.timeout(30000)
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          throw new Error(data.error || 'Terjadi kesalahan pada server.');
+        }
+
+        // Tampilkan hasil
+        document.getElementById('infoPanel').classList.add('hidden');
+        document.getElementById('hasilSection').classList.remove('hidden');
+        document.getElementById('hasilSection').classList.add('result-reveal');
+        showTab('indikator');
+
+        renderHasil(data);
+
+      } catch (err) {
+        if (err.name === 'TimeoutError') {
+          tampilkanError('Koneksi ke server timeout. Pastikan backend berjalan di localhost:5000.');
+        } else if (err.name === 'TypeError' && err.message.includes('fetch')) {
+          tampilkanError('Tidak dapat terhubung ke backend. Pastikan Python server berjalan: python app.py');
+        } else {
+          tampilkanError(err.message || 'Terjadi kesalahan tidak terduga.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function setLoading(loading) {
+      const btn = document.getElementById('btnAnalisis');
+      const icon = document.getElementById('btnIcon');
+      const text = document.getElementById('btnText');
+      const spinner = document.getElementById('btnSpinner');
+
+      if (loading) {
+        btn.disabled = true;
+        btn.style.opacity = '0.75';
+        icon.classList.add('hidden');
+        spinner.classList.remove('hidden');
+        text.textContent = 'Memproses...';
+      } else {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        icon.classList.remove('hidden');
+        spinner.classList.add('hidden');
+        text.textContent = 'Analisis Sekarang';
+      }
+    }
+
+    function tampilkanError(pesan) {
+      document.getElementById('errorMsg').textContent = pesan;
+      document.getElementById('errorBox').classList.remove('hidden');
+    }
+
+    function sembunyikanError() {
+      document.getElementById('errorBox').classList.add('hidden');
+    }
+
+    function resetForm() {
+      document.getElementById('hasilSection').classList.add('hidden');
+      document.getElementById('infoPanel').classList.remove('hidden');
+      document.getElementById('inputTeks').value = '';
+      document.getElementById('inputUrl').value = '';
+      document.getElementById('charCount').textContent = '0 karakter';
+      sembunyikanError();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Allow Enter on textarea with Ctrl+Enter to submit
+    document.getElementById('inputTeks').addEventListener('keydown', function(e) {
+      if (e.ctrlKey && e.key === 'Enter') jalankanAnalisis();
+    });
+  </script>
+</body>
+</html>
